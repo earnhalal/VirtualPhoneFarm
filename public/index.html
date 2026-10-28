@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Virtual Phone Farm — Control Panel</title>
+<style>
+  * { box-sizing: border-box; margin: 0; font-family: system-ui, sans-serif; }
+  body { background: #0f1115; color: #e8eaf0; padding: 12px; }
+  header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  h1 { font-size: 18px; }
+  .pill { font-size: 12px; padding: 4px 10px; border-radius: 99px; background: #1d2330; }
+  .pill.on { background: #14532d; color: #86efac; }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  button, select, input { background: #1d2330; color: #e8eaf0; border: 1px solid #2c3548; border-radius: 10px; padding: 9px 12px; font-size: 14px; }
+  button:active { transform: scale(.97); }
+  button.accent { background: #2563eb; border-color: #2563eb; }
+  button.warn { background: #7f1d1d; border-color: #991b1b; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+  .card { background: #171b24; border: 2px solid #232a3a; border-radius: 16px; padding: 8px; }
+  .card.sel { border-color: #2563eb; }
+  .card .meta { font-size: 11px; color: #9aa4b8; line-height: 1.5; word-break: break-all; }
+  .card .name { font-weight: 700; font-size: 14px; display: flex; justify-content: space-between; align-items: center; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #ef4444; display: inline-block; }
+  .dot.online { background: #22c55e; }
+  .screen { width: 100%; aspect-ratio: 9/19; background: #000; border-radius: 10px; object-fit: cover; display: block; margin: 6px 0; }
+  .screen.off { display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 12px; text-align: center; padding: 8px; }
+  .focus { margin-top: 14px; background: #171b24; border-radius: 16px; padding: 12px; }
+  .focus img { width: 100%; max-width: 340px; border-radius: 12px; background:#000; display:block; margin: 0 auto 10px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+  #toast { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); background: #1d2330; padding: 10px 16px; border-radius: 99px; font-size: 13px; opacity: 0; transition: .3s; max-width: 92vw; text-align:center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📱 Virtual Phone Farm</h1>
+  <span id="conn" class="pill">connecting…</span>
+</header>
+
+<div id="hostBanner" style="display:none;background:#7f1d1d;border-radius:12px;padding:10px 12px;font-size:13px;margin-bottom:12px">
+  ⚠️ <b>Phones ka host server abhi connected nahi hai.</b> Ye website (dashboard) live hai, lekin asal Android phones chalane ke liye peeche ek host server on hona lazmi hai — jab host jud jayega, yehi phones yahan ONLINE ho jayenge.
+</div>
+
+<div class="bar">
+  <button id="modeBtn">Mode: Single device</button>
+  <button id="refreshBtn">↻ Refresh screens</button>
+  <span class="pill" id="count">0 devices</span>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="focus" id="focusBox" style="display:none">
+  <div class="name" style="font-weight:700;margin-bottom:8px" id="focusTitle"></div>
+  <img id="focusScreen" alt="device screen">
+  <div class="row">
+    <button data-key="back">◀ Back</button>
+    <button data-key="home">● Home</button>
+    <button data-key="recent">■ Apps</button>
+    <button data-key="volup">Vol +</button>
+    <button data-key="voldown">Vol −</button>
+    <button data-key="power">⏻ Power</button>
+  </div>
+  <div class="row">
+    <input id="textIn" placeholder="Type text…" style="flex:1;min-width:130px">
+    <button id="sendText" class="accent">Send text</button>
+  </div>
+  <div class="row">
+    <input id="pkgIn" placeholder="App package e.g. com.android.chrome" style="flex:1;min-width:170px">
+    <button id="openApp">Open app</button>
+    <button id="rebootBtn" class="warn">Reboot</button>
+  </div>
+  <p style="font-size:12px;color:#9aa4b8;margin-top:8px;text-align:center">Screen par tap karna = usi jagah asal phone par tap. Broadcast mode mein ek action sab phones par jata hai.</p>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let devices = [], selected = null, broadcast = false, ws = null;
+
+function toast(t){ const el=document.getElementById('toast'); el.textContent=t; el.style.opacity=1; setTimeout(()=>el.style.opacity=0,2600); }
+function target(){ return broadcast ? 'ALL' : selected; }
+
+function sendCmd(action){
+  const t = target(); if(!t){ toast('Pehle ek phone select karo'); return; }
+  const d = devices.find(x=>x.id===t);
+  if(!broadcast && d && d.status!=='online'){ toast('Ye phone OFFLINE hai — pehle host server on hoga to control chalega'); return; }
+  if(ws && ws.readyState===1) ws.send(JSON.stringify({kind:'command', target:t, action}));
+  else fetch('/api/command',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target:t,action})});
+}
+
+function render(){
+  document.getElementById('count').textContent = devices.length + ' devices • ' + devices.filter(d=>d.status==='online').length + ' online';
+  const g = document.getElementById('grid'); g.innerHTML='';
+  devices.forEach(d=>{
+    const c = document.createElement('div'); c.className='card'+(selected===d.id?' sel':'');
+    c.innerHTML = `<div class="name">${d.id} <span class="dot ${d.status==='online'?'online':''}"></span></div>` +
+      (d.status==='online'
+        ? `<img class="screen" src="/api/devices/${d.id}/screenshot?t=${Date.now()}" alt="">`
+        : `<div class="screen off">OFFLINE<br>phone abhi host par start nahi hua</div>`) +
+      `<div class="meta">IP: ${d.ip||'-'}<br>Android ID: ${d.androidId||'-'}<br>${d.model} • Android ${d.android}</div>`;
+    c.onclick = ()=>{ selected=d.id; render(); showFocus(); };
+    g.appendChild(c);
+  });
+  showFocus();
+}
+
+function showFocus(){
+  const d = devices.find(x=>x.id===selected); const box=document.getElementById('focusBox');
+  if(!d){ box.style.display='none'; return; }
+  box.style.display='block';
+  document.getElementById('focusTitle').textContent = (broadcast?'📢 Broadcast → sab phones':d.id+' — '+d.name) + ' • ' + d.status;
+  const img=document.getElementById('focusScreen');
+  if(d.status==='online') img.src = `/api/devices/${d.id}/screenshot?t=${Date.now()}`; else img.removeAttribute('src');
+}
+
+// Tap on the big screen = real tap on the phone (coordinates scaled to real resolution)
+document.getElementById('focusScreen').addEventListener('click', e=>{
+  const img=e.target; if(!img.naturalWidth) return;
+  const r=img.getBoundingClientRect();
+  const x=Math.round((e.clientX-r.left)/r.width*img.naturalWidth);
+  const y=Math.round((e.clientY-r.top)/r.height*img.naturalHeight);
+  sendCmd({type:'tap',x,y}); toast('Tap bheja → '+(broadcast?'ALL':selected));
+});
+
+document.querySelectorAll('[data-key]').forEach(b=> b.onclick=()=> sendCmd({type:'key',key:b.dataset.key}));
+document.getElementById('sendText').onclick=()=> sendCmd({type:'text',text:document.getElementById('textIn').value});
+document.getElementById('openApp').onclick=()=> sendCmd({type:'openApp',pkg:document.getElementById('pkgIn').value.trim()});
+document.getElementById('rebootBtn').onclick=()=> { if(confirm('Reboot?')) sendCmd({type:'reboot'}); };
+document.getElementById('refreshBtn').onclick=render;
+document.getElementById('modeBtn').onclick=e=>{ broadcast=!broadcast; e.target.textContent = broadcast?'Mode: 📢 Broadcast (SAB phones)':'Mode: Single device'; showFocus(); };
+
+// Website-only mode: agar hub na mile to farm layout OFFLINE sach ke saath dikhao
+const FARM_FALLBACK = ['VM-001','VM-002','VM-003','VM-004','VM-005'].map((id,i)=>({
+  id, name:'Phone '+(i+1), ip:'172.28.0.'+(11+i), androidId:'—', model:'Virtual Android', android:'13', status:'offline'
+}));
+function websiteMode(){
+  document.getElementById('hostBanner').style.display='block';
+  if(!devices.length){ devices = FARM_FALLBACK; selected = devices[0].id; render(); }
+}
+
+function connect(){
+  ws = new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host);
+  ws.onopen=()=>{ const c=document.getElementById('conn'); c.textContent='● 1 connection — connected'; c.className='pill on'; };
+  ws.onclose=()=>{ const c=document.getElementById('conn'); c.textContent='host offline'; c.className='pill'; websiteMode(); };
+  ws.onerror=()=>{ websiteMode(); };
+  ws.onmessage=e=>{ const m=JSON.parse(e.data);
+    if(m.kind==='devices'){ devices=m.devices; if(!selected&&devices.length) selected=devices[0].id; render(); }
+    if(m.kind==='result'){ const bad=Object.entries(m.results).filter(([,r])=>!r.ok); toast(bad.length? 'Kuch devices offline hain: '+bad.map(([k])=>k).join(', ') : 'Ho gaya ✓ → '+m.target); }
+  };
+}
+connect();
+setInterval(()=>{ devices.filter(d=>d.status==='online').forEach(()=>render()); }, 8000);
+</script>
+</body>
+</html>

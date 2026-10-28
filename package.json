@@ -1,0 +1,1 @@
+{"dependencies":{"express":"^4.19.2","ws":"^8.17.1"},"description":"Browser control panel for multiple real virtual Android phones - one hub connection, every device with its own ID and IP","main":"hub/server.js","name":"virtual-phone-farm","scripts":{"start":"node hub/server.js","test":"node hub/test-hub.js"},"type":"commonjs","version":"1.0.0"}
