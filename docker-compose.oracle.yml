@@ -1,0 +1,96 @@
+# Oracle Cloud Always Free (ARM) ke liye — har service = 1 asal Android phone
+# Ye layout redroid-script ki TESTED Oracle environment par mabni hai:
+# Oracle Cloud, Ubuntu ARM64, 4 cores. Official redroid ARM64 images use hoti hain.
+# Free limit ab ~2 OCPU / 12GB RAM hai, is liye yahan 4 phones hain
+# (host ~2GB + 4 x ~2GB). 5th phone chahiye to block copy karke VM-005/.15/5560 add karein.
+# IPs aur IDs website wale dashboard (VM-001..) se bilkul match hain.
+
+services:
+  phone-1:
+    image: redroid/redroid:13.0.0-arm64
+    container_name: vm-001
+    hostname: vm-001
+    privileged: true
+    restart: unless-stopped
+    volumes:
+      - vm001-data:/data
+    ports:
+      - "5555:5555"
+    networks:
+      farm:
+        ipv4_address: 172.28.0.11
+    command:
+      - androidboot.redroid_width=720
+      - androidboot.redroid_height=1280
+      - androidboot.redroid_fps=15
+      - androidboot.redroid_gpu_mode=guest
+
+  phone-2:
+    image: redroid/redroid:13.0.0-arm64
+    container_name: vm-002
+    hostname: vm-002
+    privileged: true
+    restart: unless-stopped
+    volumes:
+      - vm002-data:/data
+    ports:
+      - "5556:5555"
+    networks:
+      farm:
+        ipv4_address: 172.28.0.12
+    command:
+      - androidboot.redroid_width=720
+      - androidboot.redroid_height=1280
+      - androidboot.redroid_fps=15
+      - androidboot.redroid_gpu_mode=guest
+
+  phone-3:
+    image: redroid/redroid:13.0.0-arm64
+    container_name: vm-003
+    hostname: vm-003
+    privileged: true
+    restart: unless-stopped
+    volumes:
+      - vm003-data:/data
+    ports:
+      - "5557:5555"
+    networks:
+      farm:
+        ipv4_address: 172.28.0.13
+    command:
+      - androidboot.redroid_width=720
+      - androidboot.redroid_height=1280
+      - androidboot.redroid_fps=15
+      - androidboot.redroid_gpu_mode=guest
+
+  phone-4:
+    image: redroid/redroid:13.0.0-arm64
+    container_name: vm-004
+    hostname: vm-004
+    privileged: true
+    restart: unless-stopped
+    volumes:
+      - vm004-data:/data
+    ports:
+      - "5558:5555"
+    networks:
+      farm:
+        ipv4_address: 172.28.0.14
+    command:
+      - androidboot.redroid_width=720
+      - androidboot.redroid_height=1280
+      - androidboot.redroid_fps=15
+      - androidboot.redroid_gpu_mode=guest
+
+networks:
+  farm:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+volumes:
+  vm001-data:
+  vm002-data:
+  vm003-data:
+  vm004-data:
